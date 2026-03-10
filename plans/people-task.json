@@ -1,0 +1,50 @@
+[
+  {
+    "title": "Setup project",
+    "description": "Init npm, install deps, create .env",
+    "steps": [
+      "Run `npm init -y && npm install csv-parse openai`",
+      "Create `.env` with `OPENROUTER_API_KEY` and `AG3NTS_API_KEY`",
+      "OpenAI SDK works with OpenRouter via base URL override"
+    ]
+  },
+  {
+    "title": "Load & filter CSV",
+    "description": "Parse people.csv and filter for men aged 20-40 born in Grudziądz",
+    "steps": [
+      "Parse `data/people.csv` (~24k rows) with `csv-parse`",
+      "Columns: name, surname, gender, birthDate (YYYY-MM-DD), birthPlace, birthCountry, job",
+      "Filter: gender=\"M\", birthPlace=\"Grudziądz\", birth year 1986-2006",
+      "Expected: small subset (dozens)"
+    ]
+  },
+  {
+    "title": "Tag jobs via LLM",
+    "description": "Send each filtered person's job to OpenRouter LLM for tagging with structured output",
+    "steps": [
+      "Use OpenAI SDK with `baseURL: \"https://openrouter.ai/api/v1\"`",
+      "For each filtered person, send `job` to LLM",
+      "Use `response_format` with JSON schema enforcing `{ tags: string[] }`",
+      "Tag list: [\"IT\", \"transport\", \"edukacja\", \"medycyna\", \"praca z ludźmi\", \"praca z pojazdami\", \"praca fizyczna\"]",
+      "Tags is an ARRAY — one person can have multiple tags",
+      "Can batch: send multiple jobs per request"
+    ]
+  },
+  {
+    "title": "Filter for transport",
+    "description": "Keep only records tagged with transport",
+    "steps": [
+      "Filter tagged results where `tags` includes \"transport\""
+    ]
+  },
+  {
+    "title": "Submit to hub",
+    "description": "POST results to ag3nts verification endpoint",
+    "steps": [
+      "POST to https://hub.ag3nts.org/verify",
+      "Body: { apikey, task: \"people\", answer: [{ name, surname, gender: \"M\", born: <year>, city: \"Grudziądz\", tags: [...] }] }",
+      "Run with `npx tsx index.ts`",
+      "Check: filtered count, tagged results, response with flag"
+    ]
+  }
+]
