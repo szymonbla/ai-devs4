@@ -1,4 +1,8 @@
-export const CSV_PATH = "data/people.csv";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+export const CSV_PATH = join(__dirname, "..", "data", "people.csv");
 export const GENDER = "M";
 export const BIRTH_PLACE = "Grudziądz";
 export const BIRTH_YEAR_MIN = 1986;
