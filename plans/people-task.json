@@ -2,6 +2,7 @@
   {
     "title": "Setup project",
     "description": "Init npm, install deps, create .env",
+    "tested": true,
     "steps": [
       "Run `npm init -y && npm install csv-parse openai`",
       "Create `.env` with `OPENROUTER_API_KEY` and `AG3NTS_API_KEY`",
@@ -11,6 +12,7 @@
   {
     "title": "Load & filter CSV",
     "description": "Parse people.csv and filter for men aged 20-40 born in Grudziądz",
+    "tested": true,
     "steps": [
       "Parse `data/people.csv` (~24k rows) with `csv-parse`",
       "Columns: name, surname, gender, birthDate (YYYY-MM-DD), birthPlace, birthCountry, job",
@@ -21,6 +23,7 @@
   {
     "title": "Tag jobs via LLM",
     "description": "Send each filtered person's job to OpenRouter LLM for tagging with structured output",
+    "tested": false,
     "steps": [
       "Use OpenAI SDK with `baseURL: \"https://openrouter.ai/api/v1\"`",
       "For each filtered person, send `job` to LLM",
@@ -33,6 +36,7 @@
   {
     "title": "Filter for transport",
     "description": "Keep only records tagged with transport",
+    "tested": false,
     "steps": [
       "Filter tagged results where `tags` includes \"transport\""
     ]
@@ -40,6 +44,7 @@
   {
     "title": "Submit to hub",
     "description": "POST results to ag3nts verification endpoint",
+    "tested": false,
     "steps": [
       "POST to https://hub.ag3nts.org/verify",
       "Body: { apikey, task: \"people\", answer: [{ name, surname, gender: \"M\", born: <year>, city: \"Grudziądz\", tags: [...] }] }",

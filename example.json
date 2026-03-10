@@ -1,14 +1,10 @@
 {
     "title": "Cherry-pick a lesson",
     "description": "User interactively selects and cherry-picks a lesson",
+    "tested": true,
     "steps": [
-      "User runs `ai-hero cherry-pick` without arguments",
-      "System fetches latest commits from upstream",
-      "User sees searchable autocomplete with available lessons",
-      "User types to filter lessons by ID or message",
-      "User selects a lesson (e.g., '01.02.03 Add new feature')",
-      "System displays: 'Cherry-picking <sha> onto current branch...'",
-      "System applies the commit to current branch",
-      "System displays: '✓ Successfully cherry-picked lesson 01.02.03'"
+      "Run `npm init -y && npm install csv-parse openai`",
+      "Create `.env` with `OPENROUTER_API_KEY` and `AG3NTS_API_KEY`",
+      "OpenAI SDK works with OpenRouter via base URL override"
     ]
 }
