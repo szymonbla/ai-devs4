@@ -2,5 +2,8 @@
   "name": "ai-devs4",
   "version": "1.0.0",
   "private": true,
-  "description": "AI Devs 4 exercises"
+  "description": "AI Devs 4 exercises",
+  "dependencies": {
+    "dotenv": "^16.4.0"
+  }
 }
