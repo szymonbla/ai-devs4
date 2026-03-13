@@ -1,41 +1,45 @@
 ---
 name: to-issues
-description: Converts a goal or task description into a structured plan file in the /plans folder. Use when user wants to create a plan, break down a task into steps, or generate a plan file from a goal or task description.
+description: Converts a goal or task description into a structured JSON plan file inside the exercise's plans/ directory. Use when user wants to create a plan, break down a task into steps, or generate a plan file from a goal or task description.
 ---
 
 # To Issues
 
 ## Quick start
 
-User provides a goal or task description. Create a single JSON plan file in `/plans/`.
+User provides a goal/task. Detect exercise context (e.g. `e01/`, `e02/`), create `<exercise>/plans/<kebab-case-title>.json`.
 
 ## Workflow
 
-1. Analyze the user's goal/task
-2. Determine a concise title
-3. Write a brief description summarizing the goal
-4. Break it down into ordered, actionable steps (strings)
-5. Write to `/plans/<kebab-case-title>.json`
+1. Detect exercise directory from context (current file, git status, or ask)
+2. If task requires external connections (APIs, DBs, services) — ask clarifying questions before proceeding
+3. Break task into commands with user-flow, error, and behavior scenarios
+4. Write `<exercise>/plans/<kebab-case-title>.json` following the schema below
+5. Create `plans/` inside the exercise dir if it doesn't exist
+6. Report the file path
 
 ## Output format
 
+Follow `.claude/skills/to-issues/prd-example.json` exactly — JSON array of objects:
+
 ```json
-{
-  "title": "Short task title",
-  "description": "What this plan achieves and why.",
-  "steps": [
-    "Step one action",
-    "Step two action",
-    "..."
-  ]
-}
+[
+  {
+    "command": "command-name",
+    "category": "user-flow | error | behavior",
+    "description": "What this scenario tests",
+    "tested": false,
+    "steps": [
+      "Step 1 description",
+      "Step 2 description"
+    ]
+  }
+]
 ```
 
 ## Rules
 
-- Steps must be concrete and actionable, not vague
+- Steps must be concrete and actionable
 - Steps ordered from first to last
-- One file per plan, named `<kebab-case-title>.json`
-- Create `/plans/` directory if it doesn't exist
-- Do not ask for confirmation — just create the file and report the path
-- Focus only on programming related issues, not sending data or connecting to external services.
+- File named `<kebab-case-title>.json`
+- Ask questions when external connections (APIs, DBs, services) are involved

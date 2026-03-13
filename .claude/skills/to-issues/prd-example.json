@@ -1,0 +1,386 @@
+[
+    {
+      "command": "validate-environment",
+      "category": "user-flow",
+      "description": "Validate Supabase pgvector version supports required embedding dimensions (1024) before setup",
+      "tested": true,
+      "steps": [
+        "Pipeline runs `validate-environment` command",
+        "System checks pgvector extension version: SELECT extversion FROM pg_extension WHERE extname = 'vector'",
+        "System queries pgvector capabilities for max dimensions on HNSW/IVFFlat indexes",
+        "System verifies if 1024 dimensions are supported for chosen index type (baai/bge-m3 via OpenRouter)",
+        "IF NOT SUPPORTED (unlikely - 1024 << 2000 limit): System halts and displays error",
+        "IF SUPPORTED: System confirms HNSW index can be created for 1024-dimensional embeddings",
+        "System validates OpenRouter API key is configured (OPENROUTER_API_KEY env var)",
+        "System logs validation results: pgvector version, index support, OpenRouter connectivity"
+      ]
+    },
+    {
+      "command": "setup-database",
+      "category": "user-flow",
+      "description": "Initialize Supabase schema with pgvector extension, documents table, chunks table with 1024-dim embeddings, and HNSW similarity search index",
+      "tested": true,
+      "steps": [
+        "Pipeline runs `setup-database` command against Supabase project",
+        "System enables pgvector extension via `CREATE EXTENSION IF NOT EXISTS vector`",
+        "System creates `documents` table with columns: id (UUID PK), internal_id (TEXT UNIQUE), refid (TEXT UNIQUE), refname (TEXT), sygnatura (TEXT), title (TEXT), date_announcement (DATE), date_publication (DATE), keywords (TEXT[]), source_url (TEXT), body_text (TEXT), meta_json (JSONB), created_at (TIMESTAMPTZ), updated_at (TIMESTAMPTZ)",
+        "System creates `chunks` table with columns: id (UUID PK), document_id (UUID FK references documents.id ON DELETE CASCADE), chunk_index (INT), chunk_text (TEXT), embedding (VECTOR(1024)), token_count (INT), created_at (TIMESTAMPTZ)",
+        "System creates unique index on chunks(document_id, chunk_index)",
+        "System creates HNSW index on chunks.embedding for fast cosine similarity search: CREATE INDEX idx_chunks_embedding_hnsw ON chunks USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)",
+        "System creates `sync_metadata` table with columns: id (UUID PK), last_sync_at (TIMESTAMPTZ), status (TEXT), checkpoint_data (JSONB), total_documents (INT), total_chunks (INT), total_tokens_used (BIGINT), total_cost_usd (DECIMAL), embedding_model (TEXT DEFAULT 'baai/bge-m3'), embedding_dimensions (INT DEFAULT 1024), created_at (TIMESTAMPTZ), updated_at (TIMESTAMPTZ)",
+        "System creates RPC function `match_chunks(query_embedding VECTOR(1024), match_threshold FLOAT, match_count INT)` that returns chunks joined with document metadata ordered by cosine similarity using HNSW index",
+        "System confirms all tables and indexes created successfully: documents table, chunks table with HNSW index, sync_metadata table, match_chunks RPC function"
+      ]
+    },
+    {
+      "command": "setup-database",
+      "category": "user-flow",
+      "description": "Setup is idempotent — running setup-database a second time does not fail or duplicate objects",
+      "tested": true,
+      "steps": [
+        "Database already has all tables, indexes, and functions from a previous setup run",
+        "Pipeline runs `setup-database` again",
+        "All CREATE statements use IF NOT EXISTS or CREATE OR REPLACE",
+        "System completes without errors",
+        "Existing data in tables is not affected"
+      ]
+    },
+    {
+      "command": "fetch-documents",
+      "category": "user-flow",
+      "description": "Initial bulk fetch discovers all UODO document IDs across the full time range with pagination",
+      "tested": true,
+      "steps": [
+        "Pipeline runs `fetch-documents --mode bulk`",
+        "System calls GET /documents/search/PublicDocument/,/publicator_subtype:eq:uodo?from=0&count=100&order=-id&fields=id,refid,refname,title,dates",
+        "API returns first 100 document objects",
+        "System detects that result count equals 100 (page is full), increments offset to 100",
+        "System calls next page: ?from=100&count=100&order=-id&fields=id,refid,refname,title,dates",
+        "System continues paginating until a page returns fewer than 100 results",
+        "System stores all discovered document references (internal_id, refid, refname, title, dates) in a local manifest or queue",
+        "System logs total count: 'Discovered N documents from UODO API'"
+      ]
+    },
+    {
+      "command": "fetch-documents",
+      "category": "user-flow",
+      "description": "Incremental fetch discovers only new documents since last sync timestamp",
+      "tested": true,
+      "steps": [
+        "Pipeline runs `fetch-documents --mode incremental`",
+        "System reads last sync timestamp from `sync_metadata` table in Supabase (e.g., 2025-11-01)",
+        "System constructs timespan as `2025-11-01,` (from last sync to now)",
+        "System calls GET /documents/search/PublicDocument/2025-11-01,/publicator_subtype:eq:uodo?from=0&count=100&order=-id&fields=id,refid,refname,title,dates",
+        "System paginates through all results",
+        "System filters out documents whose refid already exists in the `documents` table",
+        "System logs: 'Found M new documents since 2025-11-01'"
+      ]
+    },
+    {
+      "command": "fetch-content",
+      "category": "user-flow",
+      "description": "Download body text, metadata, title, and dates for a single document via refpath",
+      "tested": true,
+      "steps": [
+        "Pipeline processes document with refid 'urn:ndoc:gov:pl:uodo:2025:dkn_5131_9'",
+        "System constructs refpath by appending ':0' for body content",
+        "System calls GET /documents/public/items/urn:ndoc:gov:pl:uodo:2025:dkn_5131_9:0/body.txt",
+        "API returns plain text body of the decision",
+        "System calls GET /documents/public/items/urn:ndoc:gov:pl:uodo:2025:dkn_5131_9/meta.json",
+        "API returns metadata JSON",
+        "System calls GET /documents/public/items/urn:ndoc:gov:pl:uodo:2025:dkn_5131_9/title.json",
+        "API returns title and subtitle JSON",
+        "System calls GET /documents/public/items/urn:ndoc:gov:pl:uodo:2025:dkn_5131_9/dates.json",
+        "API returns dates JSON (announcement, publication, etc.)",
+        "System assembles a complete document record with body_text, metadata, title, dates",
+        "System constructs source_url as 'https://orzeczenia.uodo.gov.pl/orzeczenie/urn:ndoc:gov:pl:uodo:2025:dkn_5131_9'"
+      ]
+    },
+    {
+      "command": "fetch-content",
+      "category": "user-flow",
+      "description": "Batch fetch content for multiple documents with rate limiting and concurrency control",
+      "tested": true,
+      "steps": [
+        "Pipeline has a queue of 150 documents to fetch content for",
+        "System processes documents in parallel with concurrency limit of 5",
+        "System enforces minimum 200ms delay between requests to avoid overwhelming UODO API",
+        "System tracks progress: 'Fetching content: 47/150 documents processed'",
+        "System retries failed requests up to 3 times with exponential backoff (1s, 2s, 4s)",
+        "System logs total time and success/failure counts upon completion",
+        "System stores successfully fetched documents and queues failed ones for retry"
+      ]
+    },
+    {
+      "command": "chunk-documents",
+      "category": "user-flow",
+      "description": "Split a standard-length document into overlapping chunks for embedding",
+      "tested": true,
+      "steps": [
+        "Pipeline receives a document with ~3000 tokens of body text",
+        "System splits text into chunks targeting 500-1000 tokens per chunk",
+        "System applies ~100 token overlap between consecutive chunks",
+        "System splits on paragraph boundaries when possible, falling back to sentence boundaries",
+        "Each chunk retains metadata: document_id, refid, sygnatura, title, date, chunk_index",
+        "System produces 4-5 chunks for this document",
+        "System logs: 'Document DKN.5131.9.2025 split into 5 chunks (avg 650 tokens)'"
+      ]
+    },
+    {
+      "command": "chunk-documents",
+      "category": "user-flow",
+      "description": "Chunk a very long document (>10000 tokens) maintaining coherent sections",
+      "tested": true,
+      "steps": [
+        "Pipeline receives a document with ~15000 tokens of body text",
+        "System detects document exceeds typical length",
+        "System first attempts to split on section/heading boundaries if present",
+        "System then applies token-based chunking within sections that exceed 1000 tokens",
+        "System ensures overlap between all consecutive chunks",
+        "System produces ~18-20 chunks",
+        "System logs: 'Long document DKN.5131.4.2025 split into 20 chunks'"
+      ]
+    },
+    {
+      "command": "generate-embeddings",
+      "category": "user-flow",
+      "description": "Batch generate embeddings for document chunks using OpenRouter baai/bge-m3 (1024 dimensions)",
+      "tested": true,
+      "steps": [
+        "Pipeline has 50 chunks ready for embedding",
+        "System batches chunks into groups of up to 20 chunks per batch",
+        "System calls OpenRouter embeddings API with model='baai/bge-m3' via OpenAI-compatible SDK",
+        "API endpoint: https://openrouter.ai/api/v1/embeddings",
+        "API returns 1024-dimensional vectors for each chunk in the batch",
+        "System associates each embedding vector with its corresponding chunk",
+        "System repeats for remaining batches",
+        "System logs: 'Generated embeddings for 50 chunks in 3 batches, total tokens: 32000, estimated cost: $0.0003' (13x cheaper than OpenAI text-embedding-3-large)"
+      ]
+    },
+    {
+      "command": "ingest-to-supabase",
+      "category": "user-flow",
+      "description": "Insert new document with its chunks and embeddings into Supabase",
+      "tested": true,
+      "steps": [
+        "Pipeline has a fully processed document with 5 chunks and their embeddings",
+        "System inserts a row into `documents` table with metadata (refid, sygnatura, title, dates, keywords, body_text, source_url)",
+        "System receives the generated document UUID",
+        "System batch-inserts 5 rows into `chunks` table, each with document_id FK, chunk_index, chunk_text, embedding vector, token_count",
+        "System verifies row counts: 1 document + 5 chunks inserted",
+        "System logs: 'Ingested document DKN.5131.9.2025 with 5 chunks into Supabase'"
+      ]
+    },
+    {
+      "command": "ingest-to-supabase",
+      "category": "user-flow",
+      "description": "Upsert a re-ingested document replacing old chunks with new ones",
+      "tested": true,
+      "steps": [
+        "Pipeline processes a document that was previously ingested (refid already exists in documents table)",
+        "System detects existing document via refid lookup",
+        "System updates the `documents` row with new metadata and body_text, sets updated_at = NOW()",
+        "System deletes all existing chunks for this document_id (CASCADE or explicit DELETE)",
+        "System inserts new chunks with fresh embeddings",
+        "System verifies updated document has correct chunk count",
+        "System logs: 'Updated document DKN.5131.9.2025: replaced 4 old chunks with 5 new chunks'"
+      ]
+    },
+    {
+      "command": "sync",
+      "category": "user-flow",
+      "description": "Full incremental sync pipeline: discover new documents, fetch content, chunk, embed, and ingest",
+      "tested": true,
+      "steps": [
+        "Pipeline runs `sync` (scheduled daily or triggered manually)",
+        "Step 1: System runs fetch-documents in incremental mode, discovers 3 new documents",
+        "Step 2: System runs fetch-content for each new document, downloads body and metadata",
+        "Step 3: System runs chunk-documents on each fetched document",
+        "Step 4: System runs generate-embeddings for all new chunks (batch)",
+        "Step 5: System runs ingest-to-supabase for each document with its chunks and embeddings",
+        "Step 6: System updates sync_metadata.last_sync_at to current timestamp",
+        "System logs: 'Sync complete: 3 new documents, 14 chunks, 0 errors'"
+      ]
+    },
+    {
+      "command": "sync",
+      "category": "user-flow",
+      "description": "Sync skips already-ingested documents by comparing refids",
+      "tested": true,
+      "steps": [
+        "Pipeline runs incremental sync",
+        "fetch-documents returns 10 document references from API",
+        "System queries Supabase for existing refids",
+        "7 of 10 documents already exist in the database",
+        "System filters to only 3 new documents for processing",
+        "System proceeds with fetch-content, chunk, embed, ingest for only the 3 new documents",
+        "System logs: 'Skipped 7 already-ingested documents, processing 3 new'"
+      ]
+    },
+    {
+      "command": "sync",
+      "category": "user-flow",
+      "description": "Bulk sync mode processes all historical documents for initial database population",
+      "tested": true,
+      "steps": [
+        "Pipeline runs `sync --mode bulk` for initial database population",
+        "System runs fetch-documents in bulk mode, discovers all documents from UODO API (e.g., 554 total)",
+        "System queries Supabase for existing refids to skip already-ingested documents",
+        "System filters to only new documents that need processing",
+        "For each new document: fetch content, chunk, generate embeddings, ingest to database",
+        "System tracks progress: 'Processing document 47/554...'",
+        "System reports errors for failed documents but continues processing remaining documents",
+        "System updates sync_metadata.last_sync_at to current timestamp after completion",
+        "System logs final summary: 'Bulk sync complete: 554 documents discovered, 500 new documents processed, 48 errors, elapsed time: 8.5 hours'"
+      ]
+    },
+    {
+      "command": "fetch-content",
+      "category": "error",
+      "description": "Handle 404 when document content is not found at the given refpath",
+      "tested": true,
+      "steps": [
+        "System calls GET /documents/public/items/urn:ndoc:gov:pl:uodo:2025:nonexistent:0/body.txt",
+        "API returns 404 with message: 'Nie znaleziono zdarzenia dla wybranego refpath'",
+        "System logs warning: 'Document not found: urn:ndoc:gov:pl:uodo:2025:nonexistent (404)'",
+        "System marks document as failed in the processing queue with reason 'NOT_FOUND'",
+        "System continues processing remaining documents without interruption",
+        "Failed document is included in the sync summary report"
+      ]
+    },
+    {
+      "command": "fetch-content",
+      "category": "error",
+      "description": "Handle 415 unsupported media type when requesting body in unavailable format",
+      "tested": true,
+      "steps": [
+        "System calls GET /documents/public/items/{refpath}:0/body.txt",
+        "API returns 415 with message: 'Nieobsługiwany typ mediów txt dla wybranego refpath'",
+        "System logs warning: 'Unsupported format for {refpath}: 415'",
+        "System falls back to requesting body.html instead",
+        "If fallback succeeds, system strips HTML tags to extract plain text",
+        "If fallback also fails, system marks document as failed with reason 'UNSUPPORTED_FORMAT'"
+      ]
+    },
+    {
+      "command": "fetch-documents",
+      "category": "error",
+      "description": "Handle UODO API timeout or network failure with retry and exponential backoff",
+      "tested": true,
+      "steps": [
+        "System calls GET /documents/search/PublicDocument/... with 30s timeout",
+        "Request times out (ETIMEDOUT) or network error occurs (ECONNRESET)",
+        "System logs: 'UODO API request failed: ETIMEDOUT. Retrying in 1s (attempt 1/3)'",
+        "System waits 1 second and retries",
+        "Second attempt also fails",
+        "System logs: 'Retrying in 2s (attempt 2/3)'",
+        "Third attempt succeeds, pipeline continues normally",
+        "If all 3 retries fail, system logs error and marks the page as failed for later retry"
+      ]
+    },
+    {
+      "command": "ingest-to-supabase",
+      "category": "error",
+      "description": "Handle Supabase connection failure during ingestion with transaction rollback",
+      "tested": true,
+      "steps": [
+        "System begins transaction to insert document and chunks",
+        "System successfully inserts document row",
+        "Supabase connection drops during chunk insertion (3 of 5 chunks inserted)",
+        "Transaction is automatically rolled back — no partial data persists",
+        "System logs: 'Supabase ingestion failed for DKN.5131.9.2025: connection lost. Transaction rolled back.'",
+        "System queues the document for retry in next sync cycle",
+        "System continues processing other documents"
+      ]
+    },
+    {
+      "command": "sync",
+      "category": "error",
+      "description": "Sync resumes from checkpoint after partial failure mid-pipeline",
+      "tested": true,
+      "steps": [
+        "Sync starts processing 10 new documents",
+        "Documents 1-6 are fully processed and ingested successfully",
+        "Document 7 fails during embedding generation (OpenAI outage)",
+        "System logs error and records checkpoint: 'Sync checkpoint: 6/10 documents complete, failed at document 7'",
+        "System saves pipeline state (processed doc IDs, pending doc IDs) to sync_metadata",
+        "When sync is re-triggered, system reads checkpoint",
+        "System resumes from document 7, skipping already-ingested documents 1-6",
+        "System completes remaining 4 documents"
+      ]
+    },
+    {
+      "command": "chunk-documents",
+      "category": "behavior",
+      "description": "Empty or very short documents (< 50 tokens) are stored as a single chunk without splitting",
+      "tested": true,
+      "steps": [
+        "Pipeline receives a document with body text of only 30 tokens",
+        "Chunking logic detects text is below minimum chunk threshold (50 tokens)",
+        "System creates a single chunk containing the full document text",
+        "Chunk metadata includes chunk_index=0 and the full document metadata",
+        "System logs: 'Document DKN.5131.2.2025 too short for splitting, stored as single chunk (30 tokens)'"
+      ]
+    },
+    {
+      "command": "chunk-documents",
+      "category": "behavior",
+      "description": "Chunk overlap preserves sentence boundaries — never splits mid-sentence",
+      "tested": true,
+      "steps": [
+        "Pipeline processes a document with paragraphs of varying length",
+        "System reaches a chunk boundary at approximately 800 tokens",
+        "Token boundary falls in the middle of a sentence",
+        "System extends the chunk to include the complete sentence",
+        "Next chunk starts with ~100 tokens of overlap from the previous chunk's end",
+        "Overlap region also respects sentence boundaries",
+        "No chunk contains a truncated sentence at its start or end"
+      ]
+    },
+    {
+      "command": "ingest-to-supabase",
+      "category": "behavior",
+      "description": "Data integrity verification after batch ingestion confirms counts and embedding dimensions",
+      "tested": true,
+      "steps": [
+        "Pipeline completes ingesting 10 documents with 48 total chunks",
+        "System runs verification query: SELECT COUNT(*) FROM documents WHERE created_at > (sync start time)",
+        "Result is 10 — matches expected document count",
+        "System runs verification: SELECT COUNT(*) FROM chunks WHERE document_id IN (newly inserted document IDs)",
+        "Result is 48 — matches expected chunk count",
+        "System verifies no NULL embeddings: SELECT COUNT(*) FROM chunks WHERE embedding IS NULL AND document_id IN (...)",
+        "Result is 0 — all chunks have embeddings",
+        "System logs: 'Integrity check passed: 10 documents, 48 chunks, 0 null embeddings'"
+      ]
+    },
+    {
+      "command": "fetch-documents",
+      "category": "behavior",
+      "description": "Pagination correctly handles edge case where total document count is an exact multiple of page size",
+      "tested": true,
+      "steps": [
+        "UODO API has exactly 200 documents matching the filter",
+        "System fetches page 1 (from=0, count=100): receives 100 results",
+        "System detects full page, fetches page 2 (from=100, count=100): receives 100 results",
+        "System detects full page, fetches page 3 (from=200, count=100): receives 0 results (empty array)",
+        "System detects empty page and stops pagination",
+        "Total discovered documents: 200",
+        "System does not enter infinite loop or make unnecessary requests"
+      ]
+    },
+    {
+      "command": "sync",
+      "category": "behavior",
+      "description": "Concurrent sync runs are prevented by a database-level lock",
+      "tested": true,
+      "steps": [
+        "Sync process A starts and acquires advisory lock in sync_metadata (status='running')",
+        "Sync process B is triggered (e.g., duplicate cron invocation)",
+        "Process B checks sync_metadata and finds status='running' with recent heartbeat",
+        "Process B logs: 'Another sync is already in progress (started at ...). Skipping.'",
+        "Process B exits cleanly without processing any documents",
+        "Process A completes normally and releases the lock (status='idle')"
+      ]
+    }
+  ]
+  
