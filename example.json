@@ -1,4 +1,4 @@
-{
+[{
     "title": "Cherry-pick a lesson",
     "description": "User interactively selects and cherry-picks a lesson",
     "tested": true,
@@ -7,4 +7,4 @@
       "Create `.env` with `OPENROUTER_API_KEY` and `AG3NTS_API_KEY`",
       "OpenAI SDK works with OpenRouter via base URL override"
     ]
-}
+}]

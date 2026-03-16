@@ -1,7 +1,7 @@
 import type OpenAI from "openai";
 import { loadFilteredPeople } from "./pipeline/load-people.js";
 import { callModel } from "./pipeline/people.js";
-import { FILTER_TAG, GENDER, CITY, TASK } from "./constants.js";
+import { TASK } from "./constants.js";
 
 const apikey = process.env.AG3NTS_API_KEY!;
 const HUB_URL = "REDACTED_HUB_URL/verify";
