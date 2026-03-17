@@ -1,40 +1,58 @@
 import "./env.js";
 import OpenAI from "openai";
 import { tools, handlers } from "./tools.js";
+import { MODEL } from "./constants.js";
 
+// Klient OpenAI skierowany na OpenRouter — pozwala używać różnych modeli przez jedno API
 const client = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
   baseURL: "https://openrouter.ai/api/v1",
 });
 
+// Inicjalna konwersacja: system prompt definiuje CEL agenta, user message daje pierwszy impuls
+// Kluczowe: nie podajemy dokumentacji API — model ma ją odkryć sam przez akcję "help"
 const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-  { role: "system", content: "TODO: system prompt" },
-  { role: "user", content: "TODO: user prompt" },
+  {
+    role: "system",
+    content:
+      "You are activating railway route X-01 via a self-documenting API. " +
+      "Start by calling the help action to discover available actions and parameters. " +
+      "Follow the API docs exactly — use exact action names and params from the docs. " +
+      "Work step by step through the API to activate route X-01. " +
+      "When you get a flag ({FLG:...}), report it as your final answer.",
+  },
+  { role: "user", content: "Activate route X-01. Begin with the help action." },
 ];
 
-for (let i = 0; i < 15; i++) {
-  console.log(`\n── iteration ${i + 1} ── sending ${messages.length} messages...`);
+// === PĘTLA AGENTOWA ===
+// Model sam decyduje: wywołać narzędzie (tool_call) albo odpowiedzieć tekstem (koniec).
+// Max 25 iteracji jako zabezpieczenie przed nieskończoną pętlą.
+for (let i = 0; i < 25; i++) {
+  console.log(`\n[krok ${i + 1}] Wysyłam ${messages.length} wiadomości`);
+
+  // Wysyłamy CAŁĄ historię konwersacji — model widzi wszystkie wcześniejsze wywołania i wyniki
   const response = await client.chat.completions.create({
-    model: "openai/gpt-4o-mini",
+    model: MODEL,
     messages,
-    tools,
-    tool_choice: "auto",
+    tools,              // dostępne narzędzia
+    tool_choice: "auto", // model sam decyduje czy wywołać narzędzie
   });
 
   const msg = response.choices[0].message;
-  messages.push(msg);
+  messages.push(msg); // dodaj odpowiedź modelu do historii
 
+  // Brak tool_calls = model uznał, że skończył — wypisz odpowiedź i zakończ
   if (!msg.tool_calls?.length) {
-    console.log("\n── no more tool calls → done");
-    console.log("Agent:", msg.content);
+    console.log("[koniec] Brak wywołań narzędzi");
+    console.log("[odpowiedź]", msg.content);
     break;
   }
 
-  console.log(`← model wants ${msg.tool_calls.length} tool call(s)`);
   for (const tc of msg.tool_calls) {
-    if (tc.type === "function") console.log(`   • ${tc.function.name}(${tc.function.arguments.slice(0, 100)}...)`);
+    if (tc.type === "function") console.log(`[wywołanie] ${tc.function.name}(${tc.function.arguments})`);
   }
 
+  // Wykonaj wszystkie wywołania narzędzi równolegle i zwróć wyniki do modelu
   const results = await Promise.all(
     msg.tool_calls.map(async (tc) => {
       if (tc.type !== "function") return { role: "tool" as const, tool_call_id: tc.id, content: `Unsupported: ${tc.type}` };
@@ -43,14 +61,16 @@ for (let i = 0; i < 15; i++) {
       try {
         const result = await handlers[name]?.(args) ?? `Unknown tool: ${name}`;
         const resultStr = JSON.stringify(result);
-        console.log(`   ✓ ${name} → ${resultStr.slice(0, 120)}${resultStr.length > 120 ? "..." : ""}`);
+        console.log(`[wynik] ${name} → ${resultStr.slice(0, 200)}${resultStr.length > 200 ? "..." : ""}`);
+        // Wynik narzędzia wraca jako wiadomość "tool" powiązana z tool_call_id
         return { role: "tool" as const, tool_call_id: tc.id, content: resultStr };
       } catch (err) {
-        console.log(`   ✗ ${name} → Error: ${(err as Error).message}`);
+        console.log(`[błąd] ${name} → ${(err as Error).message}`);
         return { role: "tool" as const, tool_call_id: tc.id, content: `Error: ${(err as Error).message}` };
       }
     })
   );
 
+  // Dopisz wyniki narzędzi do historii — w następnej iteracji model je zobaczy
   messages.push(...results);
 }
