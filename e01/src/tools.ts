@@ -4,7 +4,7 @@ import { callModel } from "./pipeline/people.js";
 import { TASK } from "./constants.js";
 
 const apikey = process.env.AG3NTS_API_KEY!;
-const HUB_URL = "REDACTED_HUB_URL/verify";
+const HUB_URL = `${process.env.HUB_URL}/verify`;
 
 export const tools: OpenAI.Chat.ChatCompletionTool[] = [
   {

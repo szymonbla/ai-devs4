@@ -2,7 +2,7 @@ import type OpenAI from "openai";
 import { TASK } from "./constants.js";
 
 const apikey = process.env.AG3NTS_API_KEY!;
-const HUB_URL = "REDACTED_HUB_URL";
+const HUB_URL = process.env.HUB_URL!;
 
 // === DEFINICJA NARZĘDZIA ===
 // Jedno uniwersalne narzędzie do komunikacji z API kolejowym.

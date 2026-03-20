@@ -1,7 +1,7 @@
 import type OpenAI from "openai";
 
 const apikey = process.env.AG3NTS_API_KEY!;
-const HUB_URL = "REDACTED_HUB_URL";
+const HUB_URL = process.env.HUB_URL!;
 
 export const tools: OpenAI.Chat.ChatCompletionTool[] = [
   {
