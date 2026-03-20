@@ -76,7 +76,7 @@ async function registerWithHub(publicUrl: string) {
     answer: { url: publicUrl, sessionID },
   };
 
-  const res = await fetch("REDACTED_HUB_URL/verify", {
+  const res = await fetch(`${process.env.HUB_URL}/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

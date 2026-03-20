@@ -36,7 +36,7 @@ Typowy przebieg wywołań modelu:
 
 ### 4. Retry i rate limiting (tools.ts, linie 32–79)
 
-API REDACTED_DOMAIN bywa niestabilne. `callWithRetry` obsługuje:
+API hub API bywa niestabilne. `callWithRetry` obsługuje:
 - **503** — serwer niedostępny, exponential backoff
 - **Rate limit** — za dużo requestów, czekaj na reset
 - **Retry-After header** — serwer mówi ile czekać
@@ -62,7 +62,7 @@ pnpm start
 
 Wymagane zmienne w `.env`:
 - `OPENROUTER_API_KEY` — klucz do OpenRouter
-- `AG3NTS_API_KEY` — klucz do REDACTED_DOMAIN
+- `AG3NTS_API_KEY` — klucz do hub API
 
 ## Struktura plików
 
