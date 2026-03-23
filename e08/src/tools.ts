@@ -1,4 +1,4 @@
-import type OpenAI from "openai";
+import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import { TASK } from "./constants.js";
@@ -46,12 +46,12 @@ function grepLogs(keyword: string): string {
 
 // ── Main agent tools ──
 
-export const tools: OpenAI.Chat.ChatCompletionTool[] = [
+export const tools: ChatCompletionTool[] = [
   {
     type: "function",
     function: {
       name: "search_logs",
-      description: "Grep filtered failure logs by keyword (case-insensitive regex). Returns matching lines with line numbers.",
+      description: "Grep filtered failure logs by keyword (case-insensitive regex). Returns deduplicated patterns with occurrence count and time range.",
       parameters: {
         type: "object",
         properties: { query: { type: "string", description: "What to search for in the logs" } },
@@ -67,18 +67,6 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: { content: { type: "string", description: "Full log content, one entry per line. Format: YYYY-MM-DD HH:MM SEVERITY SUBSYSTEM description" } },
-        required: ["content"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "append_log",
-      description: "Append lines to result log (keeps existing). Auto-sorted after append. Use to add missing subsystem events after feedback.",
-      parameters: {
-        type: "object",
-        properties: { content: { type: "string", description: "Log lines to append. Format: YYYY-MM-DD HH:MM SEVERITY SUBSYSTEM description" } },
         required: ["content"],
       },
     },
@@ -109,7 +97,7 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
   },
 ];
 
-export function createHandlers(_client: InstanceType<typeof OpenAI>) {
+export function createHandlers() {
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
     async search_logs({ query }) {
       console.log(`   [search_logs] query: "${query}"`);
@@ -129,23 +117,6 @@ export function createHandlers(_client: InstanceType<typeof OpenAI>) {
       const tokens = Math.ceil(sorted.length / 3.5);
       console.log(`   [set_log] ${lines.length} lines, ~${tokens} tokens`);
       return { lines: lines.length, tokens };
-    },
-
-    async append_log({ content }) {
-      const existing = existsSync(RESULT_LOG) ? readFileSync(RESULT_LOG, "utf-8").trim() : "";
-      const allLines = [...existing.split("\n").filter(Boolean), ...String(content).trim().split("\n").filter(Boolean)];
-      // Deduplicate by exact match
-      const unique = [...new Set(allLines)];
-      unique.sort((a, b) => {
-        const ta = a.match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2})/)?.[1] ?? "";
-        const tb = b.match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2})/)?.[1] ?? "";
-        return ta.localeCompare(tb);
-      });
-      const sorted = unique.join("\n") + "\n";
-      writeFileSync(RESULT_LOG, sorted);
-      const tokens = Math.ceil(sorted.length / 3.5);
-      console.log(`   [append_log] ${unique.length} lines, ~${tokens} tokens`);
-      return { lines: unique.length, tokens };
     },
 
     async get_current_log() {

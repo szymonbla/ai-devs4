@@ -45,7 +45,7 @@ const client = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
 });
 
-const handlers = createHandlers(client);
+const handlers = createHandlers();
 
 const SYSTEM_PROMPT = `You compress power plant failure logs to max ${MAX_TOKENS} tokens covering ALL subsystems.
 
@@ -61,8 +61,8 @@ const SYSTEM_PROMPT = `You compress power plant failure logs to max ${MAX_TOKENS
 1. Search ALL subsystems in parallel: ECCS8, WTRPMP, WTANK07, STMTURB12, PWR01, WSTPOOL2, FIRMWARE
 2. search_logs returns deduplicated patterns — write ONE output line per unique pattern
 3. Use set_log with ALL subsystems combined
-4. count_tokens — stay under ${MAX_TOKENS}
-5. submit_answer
+4. count_tokens — if above ${MAX_TOKENS}, trim lines and repeat until below ${MAX_TOKENS}
+5. ONLY call submit_answer AFTER count_tokens confirms below ${MAX_TOKENS} — never call it speculatively
 6. If feedback says subsystem X missing: get_current_log first, then use set_log to rewrite the COMPLETE log with ALL subsystems including X
 
 ## Format
@@ -77,7 +77,8 @@ Example: 2026-03-22 06:02 WARN STMTURB12 pressure jitter above baseline (x49)
 - Output EVERY unique pattern from search results — do not skip any
 - ALWAYS include ALL 7 subsystems
 - When feedback says X missing: you DROPPED it. Use set_log to rewrite EVERYTHING, not append
-- Budget ~8 lines per subsystem, ~50-60 lines total, target <1300 tokens`;
+- Budget ~8 lines per subsystem, ~50-60 lines total, target <1300 tokens
+- submit_answer returning code != 0 means FAILURE — read the message, fix the issue, and submit again. Do NOT stop until code == 0.`;
 
 const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
   { role: "system", content: SYSTEM_PROMPT },
