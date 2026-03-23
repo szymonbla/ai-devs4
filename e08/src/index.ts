@@ -47,38 +47,27 @@ const client = new OpenAI({
 
 const handlers = createHandlers();
 
-const SYSTEM_PROMPT = `You compress power plant failure logs to max ${MAX_TOKENS} tokens covering ALL subsystems.
+const SYSTEM_PROMPT = `You compress power plant failure logs to max ${MAX_TOKENS} tokens.
 
 ## Tools
 - search_logs(query): Grep filtered logs by keyword. Returns deduplicated patterns with counts and time ranges.
 - set_log(content): Replace result log entirely. Auto-sorted by timestamp.
-- append_log(content): Append to result log (keeps existing).
 - get_current_log(): View current result log.
 - count_tokens(): Check token count — must stay under ${MAX_TOKENS}.
 - submit_answer(): Submit for verification.
 
-## Procedure
-1. Search ALL subsystems in parallel: ECCS8, WTRPMP, WTANK07, STMTURB12, PWR01, WSTPOOL2, FIRMWARE
-2. search_logs returns deduplicated patterns — write ONE output line per unique pattern
-3. Use set_log with ALL subsystems combined
-4. count_tokens — if above ${MAX_TOKENS}, trim lines and repeat until below ${MAX_TOKENS}
-5. ONLY call submit_answer AFTER count_tokens confirms below ${MAX_TOKENS} — never call it speculatively
-6. If feedback says subsystem X missing: get_current_log first, then use set_log to rewrite the COMPLETE log with ALL subsystems including X
+## Critical rules
+- NEVER search twice in a row — after any search result, next call must be set_log.
+- Include ALL unique patterns — never skip any, especially (x1) events.
+- When compressing: shorten descriptions but NEVER remove a line and NEVER drop subsystem names or rare technical terms (e.g. SAFETY_CHECK, hardware interface map, cross-check).
+- Do NOT search for INFO/DEBUG/TRACE or anything not named in feedback.
+- Do NOT stop until submit_answer returns code == 0.
 
 ## Format
-Each line: YYYY-MM-DD HH:MM SEV SUBSYS description (xN)
-Example: 2026-03-22 06:02 WARN STMTURB12 pressure jitter above baseline (x49)
-- One line per unique event pattern from search results
-- Use first timestamp, add (xN) for count
-- Keep descriptions 4-8 words — preserve key technical terms
-- No brackets, no articles
-
-## CRITICAL
-- Output EVERY unique pattern from search results — do not skip any
-- ALWAYS include ALL 7 subsystems
-- When feedback says X missing: you DROPPED it. Use set_log to rewrite EVERYTHING, not append
-- Budget ~8 lines per subsystem, ~50-60 lines total, target <1300 tokens
-- submit_answer returning code != 0 means FAILURE — read the message, fix the issue, and submit again. Do NOT stop until code == 0.`;
+Each line: YYYY-MM-DD HH:MM SEV SUBSYS message (xN)
+- Use FIRST timestamp from search result range
+- Verbatim in initial pass; compress only if over token limit
+- No square brackets; (xN) count at end`;
 
 const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
   { role: "system", content: SYSTEM_PROMPT },
