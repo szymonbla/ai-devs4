@@ -26,12 +26,11 @@ async function fetchAndFilter() {
   }
 
   const raw = readFileSync(RAW_LOG, "utf-8");
-  const filtered = raw
-    .split("\n")
-    .filter((line) => !/\b(INFO|DEBUG)\b/.test(line))
-    .join("\n");
+  const lines = raw.split("\n").filter((line) => /\[(WARN|ERRO|CRIT)\]/.test(line));
+
+  const filtered = lines.join("\n");
   writeFileSync(FILTERED_LOG, filtered);
-  console.log(`Filtered log: ${filtered.split("\n").length} lines, ${filtered.length} chars`);
+  console.log(`Filtered log: ${lines.length} lines, ${filtered.length} chars`);
 
   // Clear result log
   writeFileSync(RESULT_LOG, "");
@@ -48,33 +47,37 @@ const client = new OpenAI({
 
 const handlers = createHandlers(client);
 
-const SYSTEM_PROMPT = `You are an agent analyzing power plant failure logs. Your goal: produce a compressed log (max ${MAX_TOKENS} tokens) containing ONLY events relevant to the failure.
-
-## Context
-A power plant experienced a failure. The logs have been pre-filtered (INFO/DEBUG removed). You need to find all significant events related to: power systems, cooling, water pumps, software errors, safety systems, and any other subsystems that show anomalies.
+const SYSTEM_PROMPT = `You compress power plant failure logs to max ${MAX_TOKENS} tokens covering ALL subsystems.
 
 ## Tools
-- search_logs(query): Search filtered logs via a subagent. Use descriptive queries.
-- set_log(content): Replace the entire result log. Lines auto-sorted by timestamp.
-- get_current_log(): View current result log
-- count_tokens(): Check token count (must stay under ${MAX_TOKENS})
-- submit_answer(): Submit to Centrala for verification
+- search_logs(query): Grep filtered logs by keyword. Returns deduplicated patterns with counts and time ranges.
+- set_log(content): Replace result log entirely. Auto-sorted by timestamp.
+- append_log(content): Append to result log (keeps existing).
+- get_current_log(): View current result log.
+- count_tokens(): Check token count — must stay under ${MAX_TOKENS}.
+- submit_answer(): Submit for verification.
 
 ## Procedure
-1. Search logs systematically by subsystem: power, cooling, water/pumps, software/errors, safety, sensors, pressure, temperature, valves, alarms, emergency, critical events, warnings
-2. For each search, identify significant events and add them to the result log
-3. Paraphrase/shorten descriptions to save tokens while preserving: timestamp, severity, subsystem ID
-4. Check token count regularly — stay well under ${MAX_TOKENS}
-5. After covering all subsystems, submit the answer
-6. Read Centrala's feedback carefully — if something is missing, search for it and add it
-7. If over token limit, clear and rebuild with more concise entries
-8. Iterate until you receive a flag {FLG:...}
+1. Search ALL subsystems in parallel: ECCS8, WTRPMP, WTANK07, STMTURB12, PWR01, WSTPOOL2, FIRMWARE
+2. search_logs returns deduplicated patterns — write ONE output line per unique pattern
+3. Use set_log with ALL subsystems combined
+4. count_tokens — stay under ${MAX_TOKENS}
+5. submit_answer
+6. If feedback says subsystem X missing: get_current_log first, then use set_log to rewrite the COMPLETE log with ALL subsystems including X
 
-## Important
-- Be thorough: search for ALL subsystems, not just obvious ones
-- Be concise: paraphrase aggressively to fit within token budget
-- Preserve chronological order where possible
-- Each entry must have timestamp, severity, and subsystem identifier`;
+## Format
+Each line: YYYY-MM-DD HH:MM SEV SUBSYS description (xN)
+Example: 2026-03-22 06:02 WARN STMTURB12 pressure jitter above baseline (x49)
+- One line per unique event pattern from search results
+- Use first timestamp, add (xN) for count
+- Keep descriptions 4-8 words — preserve key technical terms
+- No brackets, no articles
+
+## CRITICAL
+- Output EVERY unique pattern from search results — do not skip any
+- ALWAYS include ALL 7 subsystems
+- When feedback says X missing: you DROPPED it. Use set_log to rewrite EVERYTHING, not append
+- Budget ~8 lines per subsystem, ~50-60 lines total, target <1300 tokens`;
 
 const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
   { role: "system", content: SYSTEM_PROMPT },
