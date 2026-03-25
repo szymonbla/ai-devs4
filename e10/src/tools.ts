@@ -1,7 +1,7 @@
 import "./env.js";
 import OpenAI from "openai";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { TASK, VISION_MODEL } from "./constants.js";
+import { TASK, VISION_MODEL, mapAnalysisSchema } from "./constants.js";
 
 const apikey = process.env.AG3NTS_API_KEY!;
 const HUB_URL = process.env.HUB_URL!;
@@ -82,27 +82,18 @@ export const handlers: Record<string, (args: Record<string, unknown>) => Promise
               type: "text",
               text: `Analyze this terrain map image. Identify the grid layout and locate the dam.
 The dam is marked with an intensified blue color.
-Grid is indexed from 1 (top-left is col=1, row=1).
-
-Return ONLY a JSON object with this exact shape:
-{
-  "grid_size": { "cols": <number>, "rows": <number> },
-  "dam_sector": { "col": <number>, "row": <number> },
-  "reasoning": "<brief explanation of how you identified the dam and counted the grid>"
-}`,
+Grid is indexed from 1 (top-left is col=1, row=1).`,
             },
             { type: "image_url", image_url: { url: mapUrl } },
           ],
         },
       ],
+      response_format: { type: "json_schema", json_schema: mapAnalysisSchema },
     });
 
     const content = response.choices[0].message.content ?? "";
     console.log(`[analyze_map] raw response: ${content.slice(0, 300)}`);
-
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error(`No JSON in vision response: ${content}`);
-    return JSON.parse(jsonMatch[0]);
+    return JSON.parse(content);
   },
 
   async submit_drone_instructions({ instructions }) {
