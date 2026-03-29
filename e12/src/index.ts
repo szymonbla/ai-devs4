@@ -35,9 +35,24 @@ const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
   { role: "user", content: "Start the investigation. First check available commands with help, then try to run /opt/firmware/cooler/cooler.bin and get the ECCS code." },
 ];
 
+async function createWithRetry(params: Parameters<typeof client.chat.completions.create>[0], maxRetries = 5) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.chat.completions.create(params);
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      if (status !== 429 || attempt === maxRetries) throw err;
+      const delay = Math.min(2000 * 2 ** attempt, 60000);
+      console.log(`   [retry] OpenAI 429 — waiting ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  return client.chat.completions.create(params);
+}
+
 for (let i = 0; i < 30; i++) {
   console.log(`\n── iteration ${i + 1} ── sending ${messages.length} messages...`);
-  const response = await client.chat.completions.create({
+  const response = await createWithRetry({
     model: MODEL,
     messages,
     tools,

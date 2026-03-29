@@ -53,13 +53,24 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
   },
 ];
 
+async function fetchWithRetry(url: string, init: RequestInit, maxRetries = 5): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, init);
+    if (res.status !== 429) return res;
+    const delay = Math.min(2000 * 2 ** attempt, 60000);
+    console.log(`   [retry] 429 — waiting ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+    await new Promise((r) => setTimeout(r, delay));
+  }
+  return fetch(url, init);
+}
+
 export const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
   async shell({ cmd }) {
     const blocked = isBlocked(cmd as string);
     if (blocked) return `BLOCKED: access to '${blocked}' is forbidden by security policy`;
 
     try {
-      const res = await fetch(SHELL_URL, {
+      const res = await fetchWithRetry(SHELL_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apikey, cmd }),
