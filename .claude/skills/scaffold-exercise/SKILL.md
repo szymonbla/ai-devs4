@@ -27,7 +27,7 @@ Creates `e03/` with all boilerplate files, ready for plan-based implementation.
 eXX/
 ├── package.json        # from TEMPLATES — update "name" field
 ├── tsconfig.json       # extends ../tsconfig.base.json
-├── data/               # empty dir (touch data/.gitkeep)
+├── knowledge/               # empty dir (touch knowledge)
 ├── src/
 │   ├── env.ts          # dotenv loader (identical every time)
 │   ├── constants.ts    # exercise-specific constants (stub)
