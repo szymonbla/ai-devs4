@@ -28,7 +28,7 @@ An autonomous agent that fetches the raw log file, pre-filters it, explores it v
 ### Architecture: Two-tier agent
 
 - **Pre-step (deterministic, before agent loop):**
-  - Fetch `failure.log` from `REDACTED_URL{API_KEY}/failure.log`
+  - Fetch `failure.log` from `{HUB_URL}/data/{API_KEY}/failure.log`
   - Regex filter: remove lines matching INFO/DEBUG severity, keep everything else
   - Save result to `data/filtered.log`
 
@@ -63,7 +63,7 @@ An autonomous agent that fetches the raw log file, pre-filters it, explores it v
 
 ### Submit format
 
-- POST to `REDACTED_URL`
+- POST to `{HUB_URL}/verify`
 - Body: `{ "apikey": KEY, "task": "failure", "answer": { "logs": "line1\nline2\n..." } }`
 
 ## Testing Decisions
