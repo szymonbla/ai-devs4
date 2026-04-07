@@ -1,7 +1,7 @@
 export const TASK = "evaluation";
 export const MODEL = "openai/gpt-4o-mini";
 export const CLASSIFY_MODEL = "anthropic/claude-sonnet-4-6";
-export const DATA_URL = "REDACTED_URL";
+export const DATA_URL = `${process.env.HUB_URL!}/dane/sensors.zip`;
 
 export const SENSOR_FIELD_MAP: Record<string, { field: string; min: number; max: number }> = {
   temperature: { field: "temperature_K", min: 553, max: 873 },

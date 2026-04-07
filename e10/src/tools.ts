@@ -6,7 +6,7 @@ import { TASK, VISION_MODEL, mapAnalysisSchema } from "./constants.js";
 const apikey = process.env.AG3NTS_API_KEY!;
 const HUB_URL = process.env.HUB_URL!;
 
-const DRONE_DOCS_URL = "REDACTED_URL";
+const DRONE_DOCS_URL = `${HUB_URL}/dane/drone.html`;
 
 const vision = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
