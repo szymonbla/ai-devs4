@@ -1,3 +1,2 @@
-// Exercise-specific constants — fill during implementation
-export const TASK = "TODO";
-export const MODEL = "openai/gpt-4o-mini";
+export const TASK = "okoeditor";
+export const MODEL = "openai/gpt-5.4-mini";
